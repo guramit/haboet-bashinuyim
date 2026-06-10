@@ -64,7 +64,8 @@ def _build_system_prompt(user: User, tasks: list[Task], today_plan: DailyPlan | 
 - {{"type": "update_task", "task_num": N, "status": "completed|skipped|partial"}}
 - {{"type": "update_mood", "score": N}}
 - {{"type": "add_insight", "text": "..."}}
-- {{"type": "add_task", "title": "...", "category": "..."}}"""
+- {{"type": "add_task", "title": "...", "category": "..."}}
+- {{"type": "schedule_followup", "task_num": N}} – השתמש בזה כשהמשתמש אומר שהוא הולך לבצע משימה עכשיו ("אני הולך לעשות", "עכשיו אני מתחיל", "יאללה עושה את זה")"""
 
 
 def _status_he(status: str) -> str:
@@ -97,6 +98,26 @@ def chat(user: User, message: str, tasks: list[Task], today_plan: DailyPlan | No
         if start >= 0 and end > start:
             return json.loads(raw[start:end])
         return {"message": raw, "actions": [], "mood_score": None}
+
+
+def generate_followup_message(user: User, task_title: str, followup_count: int) -> str:
+    client = _get_client()
+    if followup_count == 1:
+        prompt = f"""כתוב הודעת מעקב קצרה בעברית עבור {user.name or "משתמש"}.
+לפני חצי שעה אמר שהולך לבצע: "{task_title}".
+עדיין לא עדכן.
+משפט אחד בלבד – שאל בעדינות איך הולך. לא לחוצני. אנושי."""
+    else:
+        prompt = f"""כתוב הודעת מעקב שנייה ואחרונה בעברית עבור {user.name or "משתמש"}.
+לפני שעה אמר שהולך לבצע: "{task_title}". עדיין לא עדכן.
+משפט עד שניים – ציין שאם לא מתאים עכשיו אפשר להעביר למועד אחר. ללא לחץ."""
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=150,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.content[0].text.strip()
 
 
 def generate_morning_message(user: User, tasks: list[Task], day_type: str) -> str:

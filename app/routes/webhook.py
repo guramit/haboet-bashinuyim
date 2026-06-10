@@ -96,3 +96,16 @@ def _apply_actions(context: dict, actions: list[dict]):
                     "category": category,
                     "order_num": next_order,
                 }).execute()
+
+        elif atype == "schedule_followup":
+            from app.database.supabase import get_db
+            from datetime import datetime, timedelta, timezone
+            task_num = action.get("task_num")
+            matching = [t for t in tasks if t.order_num == task_num]
+            if matching:
+                db = get_db()
+                followup_at = (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat()
+                db.table("tasks").update({
+                    "follow_up_scheduled_at": followup_at,
+                    "follow_up_count": 0,
+                }).eq("id", matching[0].id).execute()

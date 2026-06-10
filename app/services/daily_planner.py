@@ -178,6 +178,52 @@ def run_evening_summaries():
             print(f"Error evening summary for {user.phone}: {e}")
 
 
+def run_followup_checks():
+    from datetime import datetime, timezone
+    from app.services import ai_coach, whatsapp
+    from app.services.context import get_user_by_phone
+
+    db = get_db()
+    now = datetime.now(timezone.utc)
+
+    # שעות שקטות: 21:00-08:00 – לא שולחים
+    hour_il = (now.hour + 3) % 24  # UTC+3 לישראל
+    if hour_il >= 21 or hour_il < 8:
+        return
+
+    res = db.table("tasks").select("*").eq("status", "pending").lte(
+        "follow_up_scheduled_at", now.isoformat()
+    ).not_.is_("follow_up_scheduled_at", "null").execute()
+
+    for task_data in (res.data or []):
+        try:
+            user_res = db.table("users").select("*").eq("id", task_data["user_id"]).limit(1).execute()
+            if not user_res.data:
+                continue
+            user = User.from_dict(user_res.data[0])
+            count = task_data.get("follow_up_count", 0) + 1
+
+            msg = ai_coach.generate_followup_message(user, task_data["title"], count)
+            whatsapp.send_message(user.phone, msg)
+
+            if count >= 2:
+                # סיימנו לעקוב – מנקים את השדות אבל המשימה נשארת פתוחה
+                db.table("tasks").update({
+                    "follow_up_scheduled_at": None,
+                    "follow_up_count": 0,
+                }).eq("id", task_data["id"]).execute()
+            else:
+                from datetime import timedelta
+                next_at = (now + timedelta(minutes=30)).isoformat()
+                db.table("tasks").update({
+                    "follow_up_scheduled_at": next_at,
+                    "follow_up_count": count,
+                }).eq("id", task_data["id"]).execute()
+
+        except Exception as e:
+            print(f"Error followup for task {task_data.get('id')}: {e}")
+
+
 def run_weekly_summaries():
     from datetime import timedelta
     from app.services import ai_coach, whatsapp
