@@ -128,12 +128,83 @@ def generate_daily_plan(user: User) -> DailyPlan | None:
     return plan
 
 
-def run_daily_plans_for_all():
+def _get_active_users() -> list[User]:
     db = get_db()
-    res = db.table("users").select("*").eq("is_active", True).execute()
-    for user_data in (res.data or []):
-        user = User.from_dict(user_data)
+    res = db.table("users").select("*").eq("is_active", True).eq("onboarding_step", "done").execute()
+    return [User.from_dict(u) for u in (res.data or [])]
+
+
+def run_daily_plans_for_all():
+    for user in _get_active_users():
         try:
             generate_daily_plan(user)
         except Exception as e:
             print(f"Error generating plan for {user.phone}: {e}")
+
+
+def run_midday_checkins():
+    from app.services import ai_coach, whatsapp
+    from app.services.context import get_or_create_today_plan, get_tasks_for_plan
+
+    for user in _get_active_users():
+        try:
+            plan = get_or_create_today_plan(user.id)
+            if not plan:
+                continue
+            tasks = get_tasks_for_plan(plan.id)
+            if not tasks:
+                continue
+            msg = ai_coach.generate_midday_checkin(user, tasks)
+            whatsapp.send_message(user.phone, msg)
+        except Exception as e:
+            print(f"Error midday checkin for {user.phone}: {e}")
+
+
+def run_evening_summaries():
+    from app.services import ai_coach, whatsapp
+    from app.services.context import get_or_create_today_plan, get_tasks_for_plan
+
+    for user in _get_active_users():
+        try:
+            plan = get_or_create_today_plan(user.id)
+            if not plan:
+                continue
+            tasks = get_tasks_for_plan(plan.id)
+            if not tasks:
+                continue
+            msg = ai_coach.generate_evening_summary(user, tasks, plan.mood_score)
+            whatsapp.send_message(user.phone, msg)
+        except Exception as e:
+            print(f"Error evening summary for {user.phone}: {e}")
+
+
+def run_weekly_summaries():
+    from datetime import timedelta
+    from app.services import ai_coach, whatsapp
+
+    db = get_db()
+    for user in _get_active_users():
+        try:
+            week_ago = (date.today() - timedelta(days=7)).isoformat()
+            plans_res = db.table("daily_plans").select("completion_rate,mood_score").eq("user_id", user.id).gte("plan_date", week_ago).execute()
+            plans = plans_res.data or []
+
+            tasks_res = db.table("tasks").select("status").eq("user_id", user.id).gte("created_at", week_ago).execute()
+            tasks = tasks_res.data or []
+
+            completed = sum(1 for t in tasks if t["status"] == "completed")
+            skipped = sum(1 for t in tasks if t["status"] == "skipped")
+            rates = [p["completion_rate"] for p in plans if p["completion_rate"] is not None]
+            avg = round(sum(rates) / len(rates) * 100) if rates else 0
+
+            stats = {
+                "active_days": len(plans),
+                "completed": completed,
+                "skipped": skipped,
+                "avg_completion": avg,
+            }
+
+            msg = ai_coach.generate_weekly_summary(user, stats)
+            whatsapp.send_message(user.phone, msg)
+        except Exception as e:
+            print(f"Error weekly summary for {user.phone}: {e}")

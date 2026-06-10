@@ -27,8 +27,13 @@ def _build_system_prompt(user: User, tasks: list[Task], today_plan: DailyPlan | 
     ) or "אין משימות להיום עדיין."
 
     return f"""אתה "הבועט בשינויים" – מאמן אישי לבעלי עסקים.
-אישיות: חם, תומך, מחבק – אך גם ישיר, מוכוון תוצאות ויודע לדחוף כשצריך.
-שפה: עברית תמיד. מקצועי אך לא יבש. אנרגטי אך לא מוגזם.
+
+אישיות: אתה מדבר כמו חבר שמכיר עסקים לעומק. ישיר, חם, לא מחמיא בחינם.
+לא רובוטי. לא מוגזם. לא שולח עשרה אימוג'ים בהודעה.
+אתה שואל שאלות טובות, מציין בעיות בעדינות, ודוחף כשצריך.
+
+כלל אימוג'ים: לכל היותר 1-2 אימוג'ים בכל הודעה. לפעמים בכלל בלי.
+שפה: עברית תמיד. משפטים קצרים. ענייניים. אנושיים.
 
 המשתמש שלך:
 - שם: {user.name or "לא ידוע"}
@@ -105,21 +110,105 @@ def generate_morning_message(user: User, tasks: list[Task], day_type: str) -> st
         for i, t in enumerate(tasks)
     )
 
-    prompt = f"""צור הודעת בוקר ב-WhatsApp בעברית עבור {user.name or "משתמש"}.
+    prompt = f"""כתוב הודעת בוקר בעברית עבור {user.name or "משתמש"}, בעל עסק בתחום {user.business_field or "עסקים"}.
 יום: {day_name}, {date_str}
 סוג יום: {day_type}
 משימות:
 {tasks_text}
 
-ההודעה צריכה:
-- פתיחה אנרגטית ומעוררת
-- רשימת המשימות עם אמוג'י מספרים (1️⃣ 2️⃣ 3️⃣)
-- טיפ קצר להיום
-- סיום עם הוראה: השב "בוצע 1" / "בוצע 2" וכו' לעדכון"""
+כללים לכתיבה:
+- טון של מאמן אמיתי, לא רובוטי. אנושי, ישיר, תכליתי.
+- פתיחה קצרה וחמה – משפט אחד בלבד
+- רשימת המשימות ממוספרת (1. 2. 3.) – ללא אימוג'י מספרים
+- משפט מוטיבציה קצר ואמיתי, לא קלישאה
+- הוראה פשוטה: כתוב "בוצע 1" / "בוצע 2" / "בוצע 3" לעדכון
+- לכל היותר אימוג'י אחד בכל ההודעה, ורק אם זה טבעי"""
 
     response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=512,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.content[0].text.strip()
+
+
+def generate_midday_checkin(user: User, tasks: list[Task]) -> str:
+    client = _get_client()
+    done = sum(1 for t in tasks if t.status == "completed")
+    total = len(tasks)
+    tasks_text = "\n".join(f"{t.order_num}. {t.title} – {_status_he(t.status)}" for t in tasks)
+
+    prompt = f"""כתוב הודעת בדיקת צהריים קצרה בעברית עבור {user.name or "משתמש"}.
+סטטוס עכשיו: {done}/{total} משימות הושלמו.
+משימות:
+{tasks_text}
+
+כללים:
+- משפט אחד עד שניים בלבד
+- אל תמנה את המשימות שוב
+- אם הושלמו הרבה – שבח קצר ואמיתי
+- אם לא הושלם כלום – שאל בצורה ישירה ולא שיפוטית מה קורה
+- טון אנושי, לא רובוטי, לכל היותר אימוג'י אחד"""
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=200,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.content[0].text.strip()
+
+
+def generate_evening_summary(user: User, tasks: list[Task], mood_score: int | None) -> str:
+    client = _get_client()
+    done = sum(1 for t in tasks if t.status == "completed")
+    skipped = sum(1 for t in tasks if t.status == "skipped")
+    total = len(tasks)
+    tasks_text = "\n".join(f"{t.order_num}. {t.title} – {_status_he(t.status)}" for t in tasks)
+
+    prompt = f"""כתוב סיכום יום בעברית עבור {user.name or "משתמש"}, בעל {user.business_name or "עסק"}.
+ביצועים היום: {done}/{total} הושלמו, {skipped} דולגו.
+משימות:
+{tasks_text}
+מצב רוח: {mood_score or "לא דווח"}/5
+
+כללים:
+- 3-4 משפטים בלבד
+- התייחס לביצועים בכנות – לא להגזים בשבחים ולא בביקורת
+- סיים עם שאלה אחת קצרה על מה שמחכה מחר
+- טון של מאמן שמכיר אותך, לא של בוט
+- לכל היותר אימוג'י אחד"""
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=300,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.content[0].text.strip()
+
+
+def generate_weekly_summary(user: User, stats: dict) -> str:
+    client = _get_client()
+
+    prompt = f"""כתוב סיכום שבוע בעברית עבור {user.name or "משתמש"}, בעל {user.business_name or "עסק"} בתחום {user.business_field or "עסקים"}.
+
+נתוני השבוע:
+- ימים פעילים: {stats.get("active_days", 0)}/7
+- משימות שהושלמו: {stats.get("completed", 0)}
+- משימות שדולגו: {stats.get("skipped", 0)}
+- אחוז ביצוע ממוצע: {stats.get("avg_completion", 0)}%
+- רצף נוכחי: {user.streak_days} ימים
+
+כללים:
+- 4-5 משפטים בלבד
+- נקודה חזקה אחת מהשבוע
+- נקודה אחת לשיפור לשבוע הבא – ספציפית, לא כללית
+- שאלה אחת לסיום שתעזור לתכנן את השבוע הבא
+- טון ישיר ואנושי, לא נאום מוטיבציה
+- ללא אימוג'ים"""
+
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=400,
         messages=[{"role": "user", "content": prompt}],
     )
     return response.content[0].text.strip()
