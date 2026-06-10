@@ -8,18 +8,18 @@ from app.models.plan import DailyPlan
 def get_user_by_phone(phone: str) -> User | None:
     db = get_db()
     clean = phone.replace("whatsapp:", "")
-    res = db.table("users").select("*").eq("phone", clean).single().execute()
+    res = db.table("users").select("*").eq("phone", clean).limit(1).execute()
     if res.data:
-        return User.from_dict(res.data)
+        return User.from_dict(res.data[0])
     return None
 
 
 def get_or_create_today_plan(user_id: str) -> DailyPlan | None:
     db = get_db()
     today = date.today().isoformat()
-    res = db.table("daily_plans").select("*").eq("user_id", user_id).eq("plan_date", today).single().execute()
+    res = db.table("daily_plans").select("*").eq("user_id", user_id).eq("plan_date", today).limit(1).execute()
     if res.data:
-        return DailyPlan.from_dict(res.data)
+        return DailyPlan.from_dict(res.data[0])
     return None
 
 

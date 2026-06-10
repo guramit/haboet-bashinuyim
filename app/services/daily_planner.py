@@ -9,10 +9,10 @@ from app.services import ai_coach, whatsapp
 def get_incomplete_tasks_from_yesterday(user_id: str) -> list[dict]:
     db = get_db()
     yesterday = (date.today() - timedelta(days=1)).isoformat()
-    plan_res = db.table("daily_plans").select("id").eq("user_id", user_id).eq("plan_date", yesterday).single().execute()
+    plan_res = db.table("daily_plans").select("id").eq("user_id", user_id).eq("plan_date", yesterday).limit(1).execute()
     if not plan_res.data:
         return []
-    plan_id = plan_res.data["id"]
+    plan_id = plan_res.data[0]["id"]
     res = db.table("tasks").select("*").eq("daily_plan_id", plan_id).in_("status", ["pending", "partial"]).execute()
     return res.data or []
 

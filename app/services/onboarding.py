@@ -63,8 +63,8 @@ def handle_onboarding(user: User, message: str) -> str:
             chosen = ["מכירות"]
         db.table("users").update({"focus_areas": chosen, "onboarding_step": "done"}).eq("phone", clean_phone).execute()
 
-        updated_res = db.table("users").select("*").eq("phone", clean_phone).single().execute()
-        updated_user = User.from_dict(updated_res.data)
+        updated_res = db.table("users").select("*").eq("phone", clean_phone).limit(1).execute()
+        updated_user = User.from_dict(updated_res.data[0])
         try:
             daily_planner.generate_daily_plan(updated_user)
         except Exception as e:
