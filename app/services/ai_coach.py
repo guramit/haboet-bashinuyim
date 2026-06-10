@@ -103,14 +103,25 @@ def chat(user: User, message: str, tasks: list[Task], today_plan: DailyPlan | No
 def generate_followup_message(user: User, task_title: str, followup_count: int) -> str:
     client = _get_client()
     if followup_count == 1:
-        prompt = f"""כתוב הודעת מעקב קצרה בעברית עבור {user.name or "משתמש"}.
+        prompt = f"""כתוב הודעת מעקב קצרה בעברית עבור {user.name or "משתמש"}, בעל {user.business_name or "עסק"}.
 לפני חצי שעה אמר שהולך לבצע: "{task_title}".
 עדיין לא עדכן.
-משפט אחד בלבד – שאל בעדינות איך הולך. לא לחוצני. אנושי."""
+
+כללים:
+- התייחס ספציפית למשימה "{task_title}" – לא שאלה גנרית
+- משפט אחד בלבד
+- טון סקרן, לא שיפוטי
+- ללא אימוג'ים"""
     else:
         prompt = f"""כתוב הודעת מעקב שנייה ואחרונה בעברית עבור {user.name or "משתמש"}.
-לפני שעה אמר שהולך לבצע: "{task_title}". עדיין לא עדכן.
-משפט עד שניים – ציין שאם לא מתאים עכשיו אפשר להעביר למועד אחר. ללא לחץ."""
+לפני שעה וחצי אמר שהולך לבצע: "{task_title}". עדיין לא עדכן.
+
+כללים:
+- התייחס ספציפית למשימה "{task_title}"
+- הצע להכניס אותה ללו"ז בהמשך אם לא מתאים עכשיו
+- 2 משפטים מקסימום
+- טון רגוע ותומך, לא מאשים
+- ללא אימוג'ים"""
 
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",

@@ -214,7 +214,8 @@ def run_followup_checks():
                 }).eq("id", task_data["id"]).execute()
             else:
                 from datetime import timedelta
-                next_at = (now + timedelta(minutes=30)).isoformat()
+                # הודעה שנייה אחרי שעה (לא 30 דקות)
+                next_at = (now + timedelta(hours=1)).isoformat()
                 db.table("tasks").update({
                     "follow_up_scheduled_at": next_at,
                     "follow_up_count": count,
