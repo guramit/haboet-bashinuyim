@@ -35,10 +35,10 @@ def start_scheduler():
         replace_existing=True,
     )
 
-    # סיכום שבוע – כל שישי ב-17:00
+    # סיכום שבוע – כל שישי ב-10:00
     _scheduler.add_job(
         run_weekly_summaries,
-        trigger=CronTrigger(day_of_week="fri", hour=17, minute=0, timezone=tz),
+        trigger=CronTrigger(day_of_week="fri", hour=10, minute=0, timezone=tz),
         id="weekly_summaries",
         replace_existing=True,
     )
