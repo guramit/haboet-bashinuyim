@@ -1,7 +1,7 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import pytz
-from app.services.daily_planner import run_daily_plans_for_all, run_midday_checkins, run_evening_summaries, run_weekly_summaries, run_followup_checks
+from app.services.daily_planner import run_daily_plans_for_all, run_midday_checkins, run_evening_summaries, run_weekly_summaries, run_followup_checks, run_engagement_check
 
 _scheduler: BackgroundScheduler | None = None
 
@@ -39,6 +39,13 @@ def start_scheduler():
         run_followup_checks,
         trigger=CronTrigger(minute="*/30", timezone=tz),
         id="followup_checks",
+        replace_existing=True,
+    )
+
+    _scheduler.add_job(
+        run_engagement_check,
+        trigger=CronTrigger(hour=10, minute=0, timezone=tz),
+        id="engagement_check",
         replace_existing=True,
     )
 

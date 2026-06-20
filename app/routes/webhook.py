@@ -25,6 +25,12 @@ async def whatsapp_webhook(request: Request):
         whatsapp.send_message(phone, reply)
         return Response(status_code=204)
 
+    # אם המשתמש היה מושהה – חדש פעילות
+    if getattr(user, 'paused_at', None):
+        from app.database.supabase import get_db as _get_db
+        _get_db().table("users").update({"paused_at": None}).eq("id", user.id).execute()
+        whatsapp.send_message(phone, f"שמח שחזרת {user.name or ''}! ממשיכים מחר בבוקר בשמונה.")
+
     context = ctx.build_context(phone)
     if not context:
         return Response(status_code=204)

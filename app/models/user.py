@@ -17,6 +17,7 @@ class User:
     is_active: bool = True
     streak_days: int = 0
     onboarding_step: str = "name"
+    paused_at: Optional[str] = None
     created_at: Optional[str] = None
 
     def to_dict(self) -> dict:
@@ -49,5 +50,6 @@ class User:
             is_active=data.get("is_active", True),
             streak_days=data.get("streak_days", 0),
             onboarding_step=data.get("onboarding_step", "name"),
+            paused_at=data.get("paused_at"),
             created_at=data.get("created_at"),
         )

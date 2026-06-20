@@ -128,9 +128,12 @@ def generate_daily_plan(user: User) -> DailyPlan | None:
     return plan
 
 
-def _get_active_users() -> list[User]:
+def _get_active_users(include_paused: bool = False) -> list[User]:
     db = get_db()
-    res = db.table("users").select("*").eq("is_active", True).eq("onboarding_step", "done").execute()
+    query = db.table("users").select("*").eq("is_active", True).eq("onboarding_step", "done")
+    if not include_paused:
+        query = query.is_("paused_at", "null")
+    res = query.execute()
     return [User.from_dict(u) for u in (res.data or [])]
 
 
@@ -176,6 +179,47 @@ def run_evening_summaries():
             whatsapp.send_message(user.phone, msg)
         except Exception as e:
             print(f"Error evening summary for {user.phone}: {e}")
+
+
+def run_engagement_check():
+    from datetime import datetime, timezone, timedelta
+    from app.services import ai_coach, whatsapp
+    import anthropic, os, json
+
+    db = get_db()
+    now = datetime.now(timezone.utc)
+    one_day_ago = (now - timedelta(hours=24)).isoformat()
+    two_days_ago = (now - timedelta(hours=48)).isoformat()
+
+    for user in _get_active_users():
+        try:
+            # בדוק מתי הייתה ההודעה האחרונה מהמשתמש
+            res = db.table("interactions").select("created_at").eq("user_id", user.id).eq("role", "user").order("created_at", desc=True).limit(1).execute()
+
+            if not res.data:
+                continue
+
+            last_response = res.data[0]["created_at"]
+
+            # יומיים ללא מענה → עצור ושלח "הכל בסדר?"
+            if last_response < two_days_ago:
+                paused = db.table("users").select("paused_at").eq("id", user.id).limit(1).execute()
+                if not paused.data[0].get("paused_at"):
+                    db.table("users").update({"paused_at": now.isoformat()}).eq("id", user.id).execute()
+                    whatsapp.send_message(user.phone, f"היי {user.name or ''}, הכל בסדר? לא שמעתי ממך כמה ימים.\nאני כאן כשתחזור.")
+
+            # יום ללא מענה → נגיעה קלה
+            elif last_response < one_day_ago:
+                client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+                resp = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=100,
+                    messages=[{"role": "user", "content": f"כתוב משפט אחד בעברית, חם וקצר, לבעל עסק בשם {user.name or 'חבר'} שלא ענה אתמול. לא להזכיר משימות. רק לגעת בו בעדינות ולגרום לו לענות מילה אחת. ללא אימוג'ים."}],
+                )
+                whatsapp.send_message(user.phone, resp.content[0].text.strip())
+
+        except Exception as e:
+            print(f"Error engagement check for {user.phone}: {e}")
 
 
 def run_followup_checks():
