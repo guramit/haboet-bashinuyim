@@ -5,7 +5,7 @@ from app.database.supabase import get_db
 from app.models.user import User
 from app.services import whatsapp, daily_planner
 
-STEPS = ["name", "business_name", "business_field", "challenges", "gender", "focus", "done"]
+STEPS = ["name", "business_name", "business_field", "challenges", "gender", "focus", "first_plan", "done"]
 
 FOCUS_OPTIONS = ["מכירות", "שיווק", "ניהול כספי", "ניהול זמן", "שגרה", "לקוחות", "צוות"]
 
@@ -118,15 +118,33 @@ def handle_onboarding(user: User, message: str) -> str:
         chosen = [f.strip() for f in message.replace("،", ",").split(",") if f.strip()]
         if not chosen:
             chosen = ["מכירות"]
-        db.table("users").update({"focus_areas": chosen, "onboarding_step": "done"}).eq("phone", clean_phone).execute()
+        db.table("users").update({"focus_areas": chosen, "onboarding_step": "first_plan"}).eq("phone", clean_phone).execute()
 
         updated_res = db.table("users").select("*").eq("phone", clean_phone).limit(1).execute()
         updated_user = User.from_dict(updated_res.data[0])
-        try:
-            daily_planner.generate_daily_plan(updated_user)
-        except Exception as e:
-            print(f"Error generating first plan: {e}")
+        name = updated_user.name or ""
+        return (
+            f"מושלם {name}, הפרופיל שלך מוכן!\n\n"
+            "מעכשיו כל בוקר בשמונה תקבל 3 משימות ממוקדות לעסק, "
+            "אעקוב אחרי הביצוע שלך לאורך היום ואהיה זמין לשיחה בכל עת.\n\n"
+            "*רוצה להתחיל עם משימות להיום, או שנתחיל מחר בבוקר?*\n(כתוב 'היום' או 'מחר')"
+        )
 
-        return f"מושלם! הפרופיל שלך מוכן.\n\nהתוכנית הראשונה שלך נשלחת עכשיו!\nמחר בשעה 8:00 תקבל תוכנית יומית חדשה אוטומטית.\n\n*בהצלחה {updated_user.name}!*"
+    elif step == "first_plan":
+        updated_res = db.table("users").select("*").eq("phone", clean_phone).limit(1).execute()
+        updated_user = User.from_dict(updated_res.data[0])
+        msg_lower = message.strip().lower()
+        start_today = any(w in msg_lower for w in ["היום", "עכשיו", "כן", "yes", "today"])
+
+        db.table("users").update({"onboarding_step": "done"}).eq("phone", clean_phone).execute()
+
+        if start_today:
+            try:
+                daily_planner.generate_first_plan(updated_user)
+            except Exception as e:
+                print(f"Error generating first plan: {e}")
+            return ""  # generate_first_plan שולח את ההודעה בעצמו
+        else:
+            return "מעולה! מחר בשמונה בבוקר תקבל את התוכנית הראשונה שלך. מוכנים להתחיל 💪"
 
     return "משהו השתבש. כתוב שלום להתחלה מחדש."

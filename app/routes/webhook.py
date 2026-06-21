@@ -22,7 +22,8 @@ async def whatsapp_webhook(request: Request):
 
     if user.onboarding_step != "done":
         reply = onboarding.handle_onboarding(user, body)
-        whatsapp.send_message(phone, reply)
+        if reply:  # first_plan עם "היום" שולח הודעה בעצמו ומחזיר ""
+            whatsapp.send_message(phone, reply)
         return Response(status_code=204)
 
     # אם המשתמש היה מושהה – חדש פעילות

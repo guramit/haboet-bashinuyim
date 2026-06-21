@@ -65,6 +65,70 @@ def select_tasks_from_library(user: User, exclude_titles: list[str], limit: int 
     return candidates[:limit]
 
 
+def _generate_tasks_with_ai(user: User) -> list[dict]:
+    import anthropic, os, json
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    resp = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=400,
+        messages=[{"role": "user", "content": f"""צור 3 משימות עסקיות ממוקדות ומעשיות עבור בעל עסק.
+שם: {user.name or "לא ידוע"}
+עסק: {user.business_name or "לא ידוע"} בתחום {user.business_field or "כללי"}
+אתגרים: {", ".join(user.main_challenges) or "לא צוינו"}
+תחומי מיקוד: {", ".join(user.focus_areas) or "כללי"}
+
+דרישות:
+- כל משימה ניתנת לביצוע היום
+- קצרות וספציפיות (עד 8 מילים)
+- מותאמות לעסק ולאתגרים
+
+החזר JSON בלבד: {{"tasks": [{{"title": "...", "category": "..."}}]}}"""}],
+    )
+    try:
+        data = json.loads(resp.content[0].text)
+        return data.get("tasks", [])
+    except Exception:
+        return [
+            {"title": "לסקור את יעדי השבוע", "category": "תכנון"},
+            {"title": "ליצור קשר עם לקוח אחד", "category": "לקוחות"},
+            {"title": "לסדר משימה אחת תקועה", "category": "שגרה"},
+        ]
+
+
+def generate_first_plan(user: User) -> None:
+    db = get_db()
+    today = date.today().isoformat()
+
+    existing = db.table("daily_plans").select("id").eq("user_id", user.id).eq("plan_date", today).execute()
+    if existing.data:
+        return
+
+    ai_tasks = _generate_tasks_with_ai(user)
+
+    plan_res = db.table("daily_plans").insert({
+        "user_id": user.id,
+        "plan_date": today,
+        "day_type": "רגיל",
+    }).execute()
+    plan_id = plan_res.data[0]["id"]
+
+    all_tasks = []
+    for i, raw in enumerate(ai_tasks, start=1):
+        task_res = db.table("tasks").insert({
+            "daily_plan_id": plan_id,
+            "user_id": user.id,
+            "title": raw["title"],
+            "category": raw.get("category"),
+            "order_num": i,
+            "is_carryover": False,
+        }).execute()
+        all_tasks.append(Task.from_dict(task_res.data[0]))
+
+    morning_msg = ai_coach.generate_morning_message(user, all_tasks, "רגיל")
+    db.table("daily_plans").update({"morning_message": morning_msg}).eq("id", plan_id).execute()
+    whatsapp.send_message(user.phone, morning_msg)
+
+
 def generate_daily_plan(user: User) -> DailyPlan | None:
     db = get_db()
     today = date.today().isoformat()
