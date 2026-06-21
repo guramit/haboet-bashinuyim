@@ -125,26 +125,21 @@ def handle_onboarding(user: User, message: str) -> str:
         name = updated_user.name or ""
         return (
             f"מושלם {name}, הפרופיל שלך מוכן!\n\n"
-            "מעכשיו כל בוקר בשמונה תקבל 3 משימות ממוקדות לעסק, "
-            "אעקוב אחרי הביצוע שלך לאורך היום ואהיה זמין לשיחה בכל עת.\n\n"
-            "*רוצה להתחיל עם משימות להיום, או שנתחיל מחר בבוקר?*\n(כתוב 'היום' או 'מחר')"
+            "בוא נתחיל מיד –\n"
+            "*מה על הפלייט שלך עכשיו? מה אתה רוצה להשיג בימים הקרובים?*\n\n"
+            "(כתוב בחופשיות – אני אעזור לך להפוך את זה למשימות)"
         )
 
     elif step == "first_plan":
         updated_res = db.table("users").select("*").eq("phone", clean_phone).limit(1).execute()
         updated_user = User.from_dict(updated_res.data[0])
-        msg_lower = message.strip().lower()
-        start_today = any(w in msg_lower for w in ["היום", "עכשיו", "כן", "yes", "today"])
 
         db.table("users").update({"onboarding_step": "done"}).eq("phone", clean_phone).execute()
 
-        if start_today:
-            try:
-                daily_planner.generate_first_plan(updated_user)
-            except Exception as e:
-                print(f"Error generating first plan: {e}")
-            return ""  # generate_first_plan שולח את ההודעה בעצמו
-        else:
-            return "מעולה! מחר בשמונה בבוקר תקבל את התוכנית הראשונה שלך. מוכנים להתחיל 💪"
+        try:
+            daily_planner.generate_first_plan_from_text(updated_user, message)
+        except Exception as e:
+            print(f"Error generating first plan: {e}")
+        return ""  # generate_first_plan_from_text שולח את ההודעה בעצמו
 
     return "משהו השתבש. כתוב שלום להתחלה מחדש."
