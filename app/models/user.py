@@ -12,7 +12,7 @@ class User:
     business_field: Optional[str] = None
     main_challenges: list[str] = field(default_factory=list)
     focus_areas: list[str] = field(default_factory=list)
-    daily_commitment: int = 30
+    gender: Optional[str] = None  # "male" | "female" | None
     timezone: str = "Asia/Jerusalem"
     is_active: bool = True
     streak_days: int = 0
@@ -29,7 +29,7 @@ class User:
             "business_field": self.business_field,
             "main_challenges": self.main_challenges,
             "focus_areas": self.focus_areas,
-            "daily_commitment": self.daily_commitment,
+            "gender": self.gender,
             "timezone": self.timezone,
             "streak_days": self.streak_days,
             "onboarding_step": self.onboarding_step,
@@ -45,7 +45,7 @@ class User:
             business_field=data.get("business_field"),
             main_challenges=data.get("main_challenges") or [],
             focus_areas=data.get("focus_areas") or [],
-            daily_commitment=data.get("daily_commitment", 30),
+            gender=data.get("gender"),
             timezone=data.get("timezone", "Asia/Jerusalem"),
             is_active=data.get("is_active", True),
             streak_days=data.get("streak_days", 0),
