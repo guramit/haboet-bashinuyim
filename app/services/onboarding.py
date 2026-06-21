@@ -31,19 +31,6 @@ def start_onboarding(phone: str) -> str:
     )
 
 
-def _detect_gender(name: str, message: str) -> str | None:
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-    resp = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=50,
-        messages=[{"role": "user", "content": f"זהה מין (זכר/נקבה) לפי השם '{name}' ו/או הטקסט: '{message}'. החזר JSON בלבד: {{\"gender\": \"male\"}} או {{\"gender\": \"female\"}} או {{\"gender\": null}} אם לא ברור."}],
-    )
-    try:
-        return json.loads(resp.content[0].text).get("gender")
-    except Exception:
-        return None
-
-
 def handle_onboarding(user: User, message: str) -> str:
     db = get_db()
     step = user.onboarding_step
@@ -51,19 +38,12 @@ def handle_onboarding(user: User, message: str) -> str:
 
     if step == "name":
         name = message.strip()
-        gender = _detect_gender(name, message)
-        update = {"name": name, "onboarding_step": "business_name"}
-        if gender:
-            update["gender"] = gender
-        db.table("users").update(update).eq("phone", clean_phone).execute()
+        db.table("users").update({"name": name, "onboarding_step": "business_name"}).eq("phone", clean_phone).execute()
         return f"נעים מאוד, {name}!\n\n*האם לעסק שלך יש שם או מותג נפרד מהשם שלך?*\n(אם כן – כתוב אותו. אם לא – כתוב 'לא')"
 
     elif step == "business_name":
         msg = message.strip()
-        if msg.lower() in ["לא", "no", "-", "אין"]:
-            biz_name = user.name
-        else:
-            biz_name = msg
+        biz_name = user.name if msg.lower() in ["לא", "no", "-", "אין"] else msg
         db.table("users").update({"business_name": biz_name, "onboarding_step": "business_field"}).eq("phone", clean_phone).execute()
         return f"*{biz_name}* – *באיזה תחום פועל העסק?*\n(לדוגמה: קמעונאות, שירותים, טכנולוגיה, בריאות, אוכל...)"
 
@@ -72,56 +52,29 @@ def handle_onboarding(user: User, message: str) -> str:
         return "*מה האתגרים העיקריים שאתה מתמודד איתם בעסק?*\n\n(כתוב בחופשיות – לדוגמה: מציאת לקוחות, ניהול זמן, שיווק, תזרים מזומנים...)"
 
     elif step == "challenges":
-        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-        resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=256,
-            messages=[{"role": "user", "content": f"חלץ רשימת אתגרים עיקריים מהטקסט הבא. החזר JSON בלבד: {{\"challenges\": [\"...\", \"...\"]}}\n\nטקסט: {message}"}],
-        )
         try:
+            client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+            resp = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=256,
+                messages=[{"role": "user", "content": f"חלץ רשימת אתגרים עיקריים מהטקסט הבא. החזר JSON בלבד: {{\"challenges\": [\"...\", \"...\"]}}\n\nטקסט: {message}"}],
+            )
             data = json.loads(resp.content[0].text)
             challenges = data.get("challenges", [message.strip()])
         except Exception:
             challenges = [message.strip()]
 
-        # נסה לזהות מין מתוך הכתיבה אם עדיין לא ידוע
-        gender_update = {}
-        current_gender = user.gender
-        if not current_gender:
-            detected = _detect_gender(user.name or "", message)
-            if detected:
-                gender_update["gender"] = detected
-                current_gender = detected
-
-        db.table("users").update({"main_challenges": challenges, **gender_update}).eq("phone", clean_phone).execute()
-
-        # אם כבר זיהינו מין – דלג על שאלת המין
-        if current_gender:
-            db.table("users").update({"onboarding_step": "focus"}).eq("phone", clean_phone).execute()
-            options = "\n".join(f"• {f}" for f in FOCUS_OPTIONS)
-            return f"*באילו תחומים תרצה להתמקד?*\n\n{options}\n\n(כתוב את התחומים שבחרת, מופרדים בפסיקה)"
-
-        db.table("users").update({"onboarding_step": "gender"}).eq("phone", clean_phone).execute()
+        db.table("users").update({"main_challenges": challenges, "onboarding_step": "gender"}).eq("phone", clean_phone).execute()
         return "שאלה אחת לפני שמתחילים –\n*איך לפנות אליך? זכר או נקבה?*"
 
     elif step == "gender":
         msg = message.strip().lower()
-        if any(w in msg for w in ["נקבה", "אישה", "בת", "female", "f"]):
-            gender = "female"
-        else:
-            gender = "male"
+        gender = "female" if any(w in msg for w in ["נקבה", "אישה", "בת", "female"]) else "male"
         db.table("users").update({"gender": gender, "onboarding_step": "focus"}).eq("phone", clean_phone).execute()
         options = "\n".join(f"• {f}" for f in FOCUS_OPTIONS)
         return f"*באילו תחומים תרצה להתמקד?*\n\n{options}\n\n(כתוב את התחומים שבחרת, מופרדים בפסיקה)"
 
     elif step == "focus":
-        # אם המשתמש עדיין עונה על שאלת המין – שלח שוב את שאלת הפוקוס
-        gender_words = ["זכר", "נקבה", "אישה", "גבר", "male", "female"]
-        if message.strip().lower() in gender_words:
-            g = "female" if any(w in message.strip().lower() for w in ["נקבה", "אישה", "female"]) else "male"
-            db.table("users").update({"gender": g}).eq("phone", clean_phone).execute()
-            options = "\n".join(f"• {f}" for f in FOCUS_OPTIONS)
-            return f"*באילו תחומים תרצה להתמקד?*\n\n{options}\n\n(כתוב את התחומים שבחרת, מופרדים בפסיקה)"
         chosen = [f.strip() for f in message.replace("،", ",").split(",") if f.strip()]
         if not chosen:
             chosen = ["מכירות"]
@@ -141,24 +94,17 @@ def handle_onboarding(user: User, message: str) -> str:
         updated_res = db.table("users").select("*").eq("phone", clean_phone).limit(1).execute()
         updated_user = User.from_dict(updated_res.data[0])
 
-        # חלץ משימות מהטקסט של המשתמש
         tasks = daily_planner.extract_tasks_from_text(updated_user, message)
-
-        # שמור את המשימות הממתינות ב-user_patterns
         tasks_json = json.dumps(tasks, ensure_ascii=False)
         db.table("user_patterns").insert({
             "user_id": updated_user.id,
             "pattern_type": "pending_first_tasks",
             "text": tasks_json,
         }).execute()
-
         db.table("users").update({"onboarding_step": "confirm_plan"}).eq("phone", clean_phone).execute()
 
         tasks_text = "\n".join(f"{i+1}. {t['title']}" for i, t in enumerate(tasks))
-        return (
-            f"הנה מה שחילצתי:\n\n{tasks_text}\n\n"
-            "*זה נראה נכון? כתוב 'כן' ונתחיל, או תאמר לי מה לשנות.*"
-        )
+        return f"הנה מה שחילצתי:\n\n{tasks_text}\n\n*זה נראה נכון? כתוב 'כן' ונתחיל, או תאמר לי מה לשנות.*"
 
     elif step == "confirm_plan":
         updated_res = db.table("users").select("*").eq("phone", clean_phone).limit(1).execute()
@@ -167,7 +113,6 @@ def handle_onboarding(user: User, message: str) -> str:
         msg_lower = message.strip().lower()
         confirmed = any(w in msg_lower for w in ["כן", "yes", "אוקי", "בסדר", "יופי", "מעולה", "נכון", "סבבה", "ok"])
 
-        # שלוף את המשימות השמורות
         pending_res = db.table("user_patterns").select("text").eq("user_id", updated_user.id).eq("pattern_type", "pending_first_tasks").order("created_at", desc=True).limit(1).execute()
         saved_tasks = []
         if pending_res.data:
@@ -184,7 +129,6 @@ def handle_onboarding(user: User, message: str) -> str:
                 print(f"Error generating first plan: {e}")
             return ""
         else:
-            # המשתמש רוצה לשנות – חלץ מחדש מהתשובה הנוכחית
             new_tasks = daily_planner.extract_tasks_from_text(updated_user, message)
             tasks_json = json.dumps(new_tasks, ensure_ascii=False)
             db.table("user_patterns").insert({
