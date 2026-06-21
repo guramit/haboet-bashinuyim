@@ -16,7 +16,7 @@ def start_onboarding(phone: str) -> str:
     db.table("users").insert({"phone": clean, "onboarding_step": "name"}).execute()
     return (
         "שלום, ברוך הבא לבועט בישבנים.\n\n"
-        "אני עוזר עסקי AI. כל בוקר אשלח לך 3 משימות ממוקדות לעסק, "
+        "אני עוזר עסקי. כל בוקר אשלח לך 3 משימות ממוקדות לעסק, "
         "אעקוב אחרי הביצוע שלך במהלך היום, ואהיה זמין לשיחה חופשית בכל עת.\n\n"
         "מה אני יכול לעשות:\n"
         "— תוכנית עבודה יומית מותאמת אישית\n"
@@ -115,6 +115,13 @@ def handle_onboarding(user: User, message: str) -> str:
         return f"*באילו תחומים תרצה להתמקד?*\n\n{options}\n\n(כתוב את התחומים שבחרת, מופרדים בפסיקה)"
 
     elif step == "focus":
+        # אם המשתמש עדיין עונה על שאלת המין – שלח שוב את שאלת הפוקוס
+        gender_words = ["זכר", "נקבה", "אישה", "גבר", "male", "female"]
+        if message.strip().lower() in gender_words:
+            g = "female" if any(w in message.strip().lower() for w in ["נקבה", "אישה", "female"]) else "male"
+            db.table("users").update({"gender": g}).eq("phone", clean_phone).execute()
+            options = "\n".join(f"• {f}" for f in FOCUS_OPTIONS)
+            return f"*באילו תחומים תרצה להתמקד?*\n\n{options}\n\n(כתוב את התחומים שבחרת, מופרדים בפסיקה)"
         chosen = [f.strip() for f in message.replace("،", ",").split(",") if f.strip()]
         if not chosen:
             chosen = ["מכירות"]
