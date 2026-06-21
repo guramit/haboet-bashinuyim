@@ -15,7 +15,7 @@ def start_onboarding(phone: str) -> str:
     clean = phone.replace("whatsapp:", "")
     db.table("users").insert({"phone": clean, "onboarding_step": "name"}).execute()
     return (
-        "שלום, ברוך הבא לבועט בשינויים.\n\n"
+        "שלום, ברוך הבא לבועט בישבנים.\n\n"
         "אני עוזר עסקי AI. כל בוקר אשלח לך 3 משימות ממוקדות לעסק, "
         "אעקוב אחרי הביצוע שלך במהלך היום, ואהיה זמין לשיחה חופשית בכל עת.\n\n"
         "מה אני יכול לעשות:\n"
