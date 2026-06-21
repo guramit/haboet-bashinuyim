@@ -5,7 +5,7 @@ from app.database.supabase import get_db
 from app.models.user import User
 from app.services import whatsapp, daily_planner
 
-STEPS = ["name", "business_name", "business_field", "challenges", "gender", "focus", "first_plan", "done"]
+STEPS = ["name", "business_name", "business_field", "challenges", "gender", "focus", "first_plan", "confirm_plan", "done"]
 
 FOCUS_OPTIONS = ["מכירות", "שיווק", "ניהול כספי", "ניהול זמן", "שגרה", "לקוחות", "צוות"]
 
@@ -126,7 +126,7 @@ def handle_onboarding(user: User, message: str) -> str:
         return (
             f"מושלם {name}, הפרופיל שלך מוכן!\n\n"
             "בוא נתחיל מיד –\n"
-            "*מה על הפלייט שלך עכשיו? מה אתה רוצה להשיג בימים הקרובים?*\n\n"
+            "*מה אתה רוצה להשיג בימים הקרובים? מה עומד לך על הראש עכשיו?*\n\n"
             "(כתוב בחופשיות – אני אעזור לך להפוך את זה למשימות)"
         )
 
@@ -134,12 +134,58 @@ def handle_onboarding(user: User, message: str) -> str:
         updated_res = db.table("users").select("*").eq("phone", clean_phone).limit(1).execute()
         updated_user = User.from_dict(updated_res.data[0])
 
-        db.table("users").update({"onboarding_step": "done"}).eq("phone", clean_phone).execute()
+        # חלץ משימות מהטקסט של המשתמש
+        tasks = daily_planner.extract_tasks_from_text(updated_user, message)
 
-        try:
-            daily_planner.generate_first_plan_from_text(updated_user, message)
-        except Exception as e:
-            print(f"Error generating first plan: {e}")
-        return ""  # generate_first_plan_from_text שולח את ההודעה בעצמו
+        # שמור את המשימות הממתינות ב-user_patterns
+        tasks_json = json.dumps(tasks, ensure_ascii=False)
+        db.table("user_patterns").insert({
+            "user_id": updated_user.id,
+            "pattern_type": "pending_first_tasks",
+            "text": tasks_json,
+        }).execute()
+
+        db.table("users").update({"onboarding_step": "confirm_plan"}).eq("phone", clean_phone).execute()
+
+        tasks_text = "\n".join(f"{i+1}. {t['title']}" for i, t in enumerate(tasks))
+        return (
+            f"הנה מה שחילצתי:\n\n{tasks_text}\n\n"
+            "*זה נראה נכון? כתוב 'כן' ונתחיל, או תאמר לי מה לשנות.*"
+        )
+
+    elif step == "confirm_plan":
+        updated_res = db.table("users").select("*").eq("phone", clean_phone).limit(1).execute()
+        updated_user = User.from_dict(updated_res.data[0])
+
+        msg_lower = message.strip().lower()
+        confirmed = any(w in msg_lower for w in ["כן", "yes", "אוקי", "בסדר", "יופי", "מעולה", "נכון", "סבבה", "ok"])
+
+        # שלוף את המשימות השמורות
+        pending_res = db.table("user_patterns").select("text").eq("user_id", updated_user.id).eq("pattern_type", "pending_first_tasks").order("created_at", desc=True).limit(1).execute()
+        saved_tasks = []
+        if pending_res.data:
+            try:
+                saved_tasks = json.loads(pending_res.data[0]["text"])
+            except Exception:
+                pass
+
+        if confirmed and saved_tasks:
+            db.table("users").update({"onboarding_step": "done"}).eq("phone", clean_phone).execute()
+            try:
+                daily_planner.generate_first_plan_from_tasks(updated_user, saved_tasks)
+            except Exception as e:
+                print(f"Error generating first plan: {e}")
+            return ""
+        else:
+            # המשתמש רוצה לשנות – חלץ מחדש מהתשובה הנוכחית
+            new_tasks = daily_planner.extract_tasks_from_text(updated_user, message)
+            tasks_json = json.dumps(new_tasks, ensure_ascii=False)
+            db.table("user_patterns").insert({
+                "user_id": updated_user.id,
+                "pattern_type": "pending_first_tasks",
+                "text": tasks_json,
+            }).execute()
+            tasks_text = "\n".join(f"{i+1}. {t['title']}" for i, t in enumerate(new_tasks))
+            return f"עדכנתי. הנה המשימות החדשות:\n\n{tasks_text}\n\n*מאשר?*"
 
     return "משהו השתבש. כתוב שלום להתחלה מחדש."

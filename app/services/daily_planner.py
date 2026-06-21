@@ -95,40 +95,38 @@ def _generate_tasks_with_ai(user: User) -> list[dict]:
         ]
 
 
-def generate_first_plan_from_text(user: User, user_text: str) -> None:
+def extract_tasks_from_text(user: User, user_text: str) -> list[dict]:
     import anthropic, os, json
-    db = get_db()
-    today = date.today().isoformat()
-
-    existing = db.table("daily_plans").select("id").eq("user_id", user.id).eq("plan_date", today).execute()
-    if existing.data:
-        return
-
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     resp = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=500,
-        messages=[{"role": "user", "content": f"""בעל עסק כתב מה הוא רוצה להשיג. חלץ מהטקסט עד 3 משימות מעשיות לימים הקרובים.
+        max_tokens=400,
+        messages=[{"role": "user", "content": f"""בעל עסק כתב מה הוא רוצה להשיג. חלץ עד 3 משימות מעשיות.
 
-פרטי המשתמש:
-- שם: {user.name or "לא ידוע"}
-- עסק: {user.business_name or "לא ידוע"} בתחום {user.business_field or "כללי"}
-- אתגרים: {", ".join(user.main_challenges) or "לא צוינו"}
-
+עסק: {user.business_name or "לא ידוע"} בתחום {user.business_field or "כללי"}
 מה כתב: "{user_text}"
 
 דרישות:
 - כל משימה קצרה וספציפית (עד 8 מילים)
-- מבוססת על מה שהוא כתב, לא על השערות
+- מבוססת על מה שהוא כתב בלבד
 - ניתנת לביצוע בימים הקרובים
 
 החזר JSON בלבד: {{"tasks": [{{"title": "...", "category": "..."}}]}}"""}],
     )
     try:
         data = json.loads(resp.content[0].text)
-        ai_tasks = data.get("tasks", [])
+        return data.get("tasks", [])[:3]
     except Exception:
-        ai_tasks = [{"title": user_text[:50], "category": "כללי"}]
+        return [{"title": user_text[:60], "category": "כללי"}]
+
+
+def generate_first_plan_from_tasks(user: User, tasks: list[dict]) -> None:
+    db = get_db()
+    today = date.today().isoformat()
+
+    existing = db.table("daily_plans").select("id").eq("user_id", user.id).eq("plan_date", today).execute()
+    if existing.data:
+        return
 
     plan_res = db.table("daily_plans").insert({
         "user_id": user.id,
@@ -138,7 +136,7 @@ def generate_first_plan_from_text(user: User, user_text: str) -> None:
     plan_id = plan_res.data[0]["id"]
 
     all_tasks = []
-    for i, raw in enumerate(ai_tasks[:3], start=1):
+    for i, raw in enumerate(tasks[:3], start=1):
         task_res = db.table("tasks").insert({
             "daily_plan_id": plan_id,
             "user_id": user.id,
@@ -152,6 +150,11 @@ def generate_first_plan_from_text(user: User, user_text: str) -> None:
     morning_msg = ai_coach.generate_morning_message(user, all_tasks, "רגיל")
     db.table("daily_plans").update({"morning_message": morning_msg}).eq("id", plan_id).execute()
     whatsapp.send_message(user.phone, morning_msg)
+
+
+def generate_first_plan_from_text(user: User, user_text: str) -> None:
+    tasks = extract_tasks_from_text(user, user_text)
+    generate_first_plan_from_tasks(user, tasks)
 
 
 def generate_first_plan(user: User) -> None:
