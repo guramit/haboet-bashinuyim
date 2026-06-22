@@ -7,7 +7,7 @@ from app.services import whatsapp, daily_planner
 
 STEPS = ["name", "gender", "business_name", "business_field", "challenges", "focus", "first_plan", "confirm_plan", "done"]
 
-FOCUS_OPTIONS = ["מכירות", "שיווק", "ניהול פיננסי", "ניהול זמן", "שגרה", "לקוחות", "ניהול ופיתוח צוות"]
+FOCUS_OPTIONS = ["מכירות", "שיווק", "ניהול פיננסי", "ניהול זמן ומשימות", "שגרה", "לקוחות", "ניהול ופיתוח צוות"]
 
 
 def _g(gender: str | None, male: str, female: str) -> str:
@@ -21,18 +21,18 @@ def start_onboarding(phone: str) -> str:
     clean = phone.replace("whatsapp:", "")
     db.table("users").insert({"phone": clean, "onboarding_step": "name"}).execute()
     return (
-        "היי, ברוך הבא לבועט בישבנים 👊\n\n"
+        "היי, ברוך הבא לבועט בישבנים.\n\n"
         "אני העוזר העסקי שלך.\n"
-        "כל בוקר נבחר יחד 3 משימות שיניעו את העסק קדימה — "
+        "כל בוקר נבחר 3 משימות ממוקדות שיניעו את העסק קדימה — "
         "ולאורך היום אהיה לצדך: אעקוב, אעודד ואשמח לשוחח על כל מה שעולה.\n\n"
         "מה אני עושה בשבילך:\n"
-        "— שולח תוכנית עבודה יומית מותאמת אישית\n"
-        "— עוקב ומעודד לביצוע המשימות לאורך היום\n"
-        "— זמין לשיחה פתוחה על אתגרים ופתרונות עסקיים\n"
-        "— שולח סיכום יומי ושבועי\n\n"
+        "- שולח תכנית עבודה יומית מותאמת בשבילך\n"
+        "- מבצע מעקב ועידוד לביצוע המשימות לאורך היום\n"
+        "- זמין בשבילך לשיחה פתוחה על אתגרים ופתרונות עסקיים\n"
+        "- שולח סיכום יומי ושבועי\n\n"
         "כמה דברים שכדאי לדעת:\n"
-        "— אין לי גישה לאינטרנט, לקבצים או למערכות חיצוניות\n"
-        "— הזיכרון שלי מכסה את 15 ההודעות האחרונות בשיחה\n\n"
+        "- אין לי גישה לאינטרנט, לקבצים או למערכות חיצוניות\n"
+        "- הזיכרון שלי מכסה את 15 ההודעות האחרונות בשיחה\n\n"
         "אז יאללה, נתחיל?\n*איך קוראים לך?*"
     )
 
@@ -103,7 +103,7 @@ def handle_onboarding(user: User, message: str) -> str:
             challenges = [message.strip()]
 
         db.table("users").update({"main_challenges": challenges, "onboarding_step": "focus"}).eq("phone", clean_phone).execute()
-        options = "\n".join(f"• {f}" for f in FOCUS_OPTIONS)
+        options = "\n".join(f"* {f}" for f in FOCUS_OPTIONS)
         want = _g(g, "תרצה", "תרצי")
         separate = _g(g, "הפרד", "הפרידי")
         chose = _g(g, "שבחרת", "שבחרת")
