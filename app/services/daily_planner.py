@@ -101,23 +101,36 @@ def extract_tasks_from_text(user: User, user_text: str) -> list[dict]:
     resp = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=400,
-        messages=[{"role": "user", "content": f"""בעל עסק כתב מה הוא רוצה להשיג. חלץ עד 3 משימות מעשיות.
+        messages=[{"role": "user", "content": f"""בעל עסק תיאר את המצב שלו. תפקידך לחלץ עד 3 משימות פעולה קונקרטיות.
 
 עסק: {user.business_name or "לא ידוע"} בתחום {user.business_field or "כללי"}
-מה כתב: "{user_text}"
+מה תיאר: "{user_text}"
 
-דרישות:
-- כל משימה קצרה וספציפית (עד 8 מילים)
-- מבוססת על מה שהוא כתב בלבד
-- ניתנת לביצוע בימים הקרובים
+חוקים:
+- כל משימה היא פעולה ספציפית (פועל + מטרה), לא תיאור מצב
+- קצרה (עד 7 מילים)
+- ניתנת לביצוע השבוע
+- אל תעתיק את מה שהוא כתב – תרגם לפעולה
 
-החזר JSON בלבד: {{"tasks": [{{"title": "...", "category": "..."}}]}}"""}],
+דוגמה: "יש לי קושי למצוא לקוחות" → "לפנות ל-3 עסקים חדשים השבוע"
+
+החזר JSON בלבד, ללא טקסט נוסף:
+{{"tasks": [{{"title": "...", "category": "מכירות"}}]}}"""}],
     )
+    raw = resp.content[0].text.strip()
     try:
-        data = json.loads(resp.content[0].text)
-        return data.get("tasks", [])[:3]
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        data = json.loads(raw[start:end])
+        tasks = data.get("tasks", [])[:3]
+        if tasks:
+            return tasks
     except Exception:
-        return [{"title": user_text[:60], "category": "כללי"}]
+        pass
+    return [
+        {"title": "לקבוע פגישה עם לקוח פוטנציאלי", "category": "מכירות"},
+        {"title": "להגדיר יעד שבועי ברור", "category": "תכנון"},
+    ]
 
 
 def generate_first_plan_from_tasks(user: User, tasks: list[dict]) -> None:
