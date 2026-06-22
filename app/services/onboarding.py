@@ -113,7 +113,7 @@ def handle_onboarding(user: User, message: str) -> str:
         msg_lower = message.strip().lower()
         confirmed = any(w in msg_lower for w in ["כן", "yes", "אוקי", "בסדר", "יופי", "מעולה", "נכון", "סבבה", "ok"])
 
-        pending_res = db.table("user_patterns").select("text").eq("user_id", updated_user.id).eq("pattern_type", "pending_first_tasks").order("created_at", desc=True).limit(1).execute()
+        pending_res = db.table("user_patterns").select("text").eq("user_id", updated_user.id).eq("pattern_type", "pending_first_tasks").limit(1).execute()
         saved_tasks = []
         if pending_res.data:
             try:
