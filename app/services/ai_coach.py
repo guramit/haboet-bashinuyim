@@ -151,6 +151,40 @@ def generate_followup_message(user: User, task_title: str, followup_count: int) 
     return response.content[0].text.strip()
 
 
+def generate_welcome_message(user: User, tasks: list[Task]) -> str:
+    client = _get_client()
+    gender = getattr(user, "gender", None)
+    if gender == "female":
+        gender_note = "פני אליה בלשון נקבה."
+    else:
+        gender_note = "פנה אליו בלשון זכר."
+
+    tasks_text = "\n".join(f"{i+1}. {t.title}" for i, t in enumerate(tasks))
+
+    prompt = f"""כתוב הודעת פתיחה ראשונה בעברית עבור {user.name or "משתמש"}, שזה עתה סיים את ההרשמה ל"בועט בישבנים".
+עסק: {user.business_name or "לא ידוע"} בתחום {user.business_field or "עסקים"}
+{gender_note}
+
+המשימות שנבחרו:
+{tasks_text}
+
+כללים:
+- זו ההודעה הראשונה שהוא מקבל – טון חם ומלהיב, כמו תחילת שותפות אמיתית
+- אל תאמר "בוקר טוב" – זו לא בהכרח הודעת בוקר
+- פתיחה אישית במשפט אחד בלבד (לדוגמה: "יאללה {user.name or ''}, מתחילים.")
+- רשימת המשימות ממוספרת (1. 2. 3.)
+- משפט אחד קצר על הסיבה שהמשימות האלה נבחרו עכשיו
+- הוראה: כתוב "בוצע 1" / "בוצע 2" / "בוצע 3" לעדכון
+- לכל היותר אימוג'י אחד, ורק אם זה טבעי"""
+
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=512,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.content[0].text.strip()
+
+
 def generate_morning_message(user: User, tasks: list[Task], day_type: str) -> str:
     client = _get_client()
     today = date.today()

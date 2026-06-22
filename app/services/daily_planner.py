@@ -160,9 +160,9 @@ def generate_first_plan_from_tasks(user: User, tasks: list[dict]) -> None:
         }).execute()
         all_tasks.append(Task.from_dict(task_res.data[0]))
 
-    morning_msg = ai_coach.generate_morning_message(user, all_tasks, "רגיל")
-    db.table("daily_plans").update({"morning_message": morning_msg}).eq("id", plan_id).execute()
-    whatsapp.send_message(user.phone, morning_msg)
+    welcome_msg = ai_coach.generate_welcome_message(user, all_tasks)
+    db.table("daily_plans").update({"morning_message": welcome_msg}).eq("id", plan_id).execute()
+    whatsapp.send_message(user.phone, welcome_msg)
 
 
 def generate_first_plan_from_text(user: User, user_text: str) -> None:
@@ -199,9 +199,9 @@ def generate_first_plan(user: User) -> None:
         }).execute()
         all_tasks.append(Task.from_dict(task_res.data[0]))
 
-    morning_msg = ai_coach.generate_morning_message(user, all_tasks, "רגיל")
-    db.table("daily_plans").update({"morning_message": morning_msg}).eq("id", plan_id).execute()
-    whatsapp.send_message(user.phone, morning_msg)
+    welcome_msg = ai_coach.generate_welcome_message(user, all_tasks)
+    db.table("daily_plans").update({"morning_message": welcome_msg}).eq("id", plan_id).execute()
+    whatsapp.send_message(user.phone, welcome_msg)
 
 
 def generate_daily_plan(user: User) -> DailyPlan | None:
