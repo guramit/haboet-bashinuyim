@@ -5,9 +5,15 @@ from app.database.supabase import get_db
 from app.models.user import User
 from app.services import whatsapp, daily_planner
 
-STEPS = ["name", "business_name", "business_field", "challenges", "gender", "focus", "first_plan", "confirm_plan", "done"]
+STEPS = ["name", "gender", "business_name", "business_field", "challenges", "focus", "first_plan", "confirm_plan", "done"]
 
-FOCUS_OPTIONS = ["מכירות", "שיווק", "ניהול כספי", "ניהול זמן", "שגרה", "לקוחות", "צוות"]
+FOCUS_OPTIONS = ["מכירות", "שיווק", "ניהול פיננסי", "ניהול זמן", "שגרה", "לקוחות", "ניהול ופיתוח צוות"]
+
+
+def _g(gender: str | None, male: str, female: str) -> str:
+    if gender == "female":
+        return female
+    return male
 
 
 def start_onboarding(phone: str) -> str:
@@ -15,19 +21,19 @@ def start_onboarding(phone: str) -> str:
     clean = phone.replace("whatsapp:", "")
     db.table("users").insert({"phone": clean, "onboarding_step": "name"}).execute()
     return (
-        "שלום, ברוך הבא לבועט בישבנים.\n\n"
-        "אני עוזר עסקי. כל בוקר אשלח לך 3 משימות ממוקדות לעסק, "
-        "אעקוב אחרי הביצוע שלך במהלך היום, ואהיה זמין לשיחה חופשית בכל עת.\n\n"
-        "מה אני יכול לעשות:\n"
-        "— תוכנית עבודה יומית מותאמת אישית\n"
-        "— מעקב ועידוד לאורך היום\n"
-        "— שיחה על אתגרים עסקיים ופתרונות\n"
-        "— סיכום יום ושבוע\n\n"
-        "מה אני לא יכול לעשות:\n"
-        "— לגשת לאינטרנט או לקבצים שלך\n"
-        "— לשלוח מיילים או להפעיל מערכות חיצוניות\n"
-        "— לזכור שיחות מעבר ל-15 ההודעות האחרונות\n\n"
-        "נתחיל?\n\n*מה שמך?*"
+        "היי, ברוך הבא לבועט בישבנים 👊\n\n"
+        "אני העוזר העסקי שלך.\n"
+        "כל בוקר נבחר יחד 3 משימות שיניעו את העסק קדימה — "
+        "ולאורך היום אהיה לצדך: אעקוב, אעודד ואשמח לשוחח על כל מה שעולה.\n\n"
+        "מה אני עושה בשבילך:\n"
+        "— שולח תוכנית עבודה יומית מותאמת אישית\n"
+        "— עוקב ומעודד לביצוע המשימות לאורך היום\n"
+        "— זמין לשיחה פתוחה על אתגרים ופתרונות עסקיים\n"
+        "— שולח סיכום יומי ושבועי\n\n"
+        "כמה דברים שכדאי לדעת:\n"
+        "— אין לי גישה לאינטרנט, לקבצים או למערכות חיצוניות\n"
+        "— הזיכרון שלי מכסה את 15 ההודעות האחרונות בשיחה\n\n"
+        "אז יאללה, נתחיל?\n*איך קוראים לך?*"
     )
 
 
@@ -35,21 +41,53 @@ def handle_onboarding(user: User, message: str) -> str:
     db = get_db()
     step = user.onboarding_step
     clean_phone = user.phone
+    g = user.gender
 
     if step == "name":
         name = message.strip()
-        db.table("users").update({"name": name, "onboarding_step": "business_name"}).eq("phone", clean_phone).execute()
-        return f"נעים מאוד, {name}!\n\n*האם לעסק שלך יש שם או מותג נפרד מהשם שלך?*\n(אם כן – כתוב אותו. אם לא – כתוב 'לא')"
+        db.table("users").update({"name": name, "onboarding_step": "gender"}).eq("phone", clean_phone).execute()
+        return (
+            f"נעים מאוד, {name}!\n\n"
+            "שאלה אחת לפני שמתחילים –\n"
+            "*איך לפנות אליך? זכר או נקבה?*"
+        )
+
+    elif step == "gender":
+        msg = message.strip().lower()
+        gender = "female" if any(w in msg for w in ["נקבה", "אישה", "בת", "female"]) else "male"
+        db.table("users").update({"gender": gender, "onboarding_step": "business_name"}).eq("phone", clean_phone).execute()
+        name = user.name or ""
+        if gender == "female":
+            return (
+                f"נעים מאוד, {name}!\n\n"
+                "*האם לעסק שלך יש שם נפרד מהשם שלך?*\n"
+                "(אם כן – כתבי אותו. אם לא – כתבי 'לא')"
+            )
+        else:
+            return (
+                f"נעים מאוד, {name}!\n\n"
+                "*האם לעסק שלך יש שם נפרד מהשם שלך?*\n"
+                "(אם כן – כתוב אותו. אם לא – כתוב 'לא')"
+            )
 
     elif step == "business_name":
         msg = message.strip()
         biz_name = user.name if msg.lower() in ["לא", "no", "-", "אין"] else msg
         db.table("users").update({"business_name": biz_name, "onboarding_step": "business_field"}).eq("phone", clean_phone).execute()
-        return f"*{biz_name}* – *באיזה תחום פועל העסק?*\n(לדוגמה: קמעונאות, שירותים, טכנולוגיה, בריאות, אוכל...)"
+        name = user.name or ""
+        return (
+            f"{name}, *באיזה תחום פועל העסק?*\n"
+            "(לדוגמה: טיפול, שיווק, שירותים, מזון...)"
+        )
 
     elif step == "business_field":
         db.table("users").update({"business_field": message.strip(), "onboarding_step": "challenges"}).eq("phone", clean_phone).execute()
-        return "*מה האתגרים העיקריים שאתה מתמודד איתם בעסק?*\n\n(כתוב בחופשיות – לדוגמה: מציאת לקוחות, ניהול זמן, שיווק, תזרים מזומנים...)"
+        write = _g(g, "כתוב", "כתבי")
+        struggle = _g(g, "מתמודד", "מתמודדת")
+        return (
+            f"*מה האתגרים העיקריים שאת{_g(g, 'ה', '')} {struggle} איתם בעסק?*\n\n"
+            f"({write} בחופשיות – לדוגמה: מציאת לקוחות, ניהול זמן, שיווק, תזרים מזומנים...)"
+        )
 
     elif step == "challenges":
         try:
@@ -64,15 +102,16 @@ def handle_onboarding(user: User, message: str) -> str:
         except Exception:
             challenges = [message.strip()]
 
-        db.table("users").update({"main_challenges": challenges, "onboarding_step": "gender"}).eq("phone", clean_phone).execute()
-        return "שאלה אחת לפני שמתחילים –\n*איך לפנות אליך? זכר או נקבה?*"
-
-    elif step == "gender":
-        msg = message.strip().lower()
-        gender = "female" if any(w in msg for w in ["נקבה", "אישה", "בת", "female"]) else "male"
-        db.table("users").update({"gender": gender, "onboarding_step": "focus"}).eq("phone", clean_phone).execute()
+        db.table("users").update({"main_challenges": challenges, "onboarding_step": "focus"}).eq("phone", clean_phone).execute()
         options = "\n".join(f"• {f}" for f in FOCUS_OPTIONS)
-        return f"*באילו תחומים תרצה להתמקד?*\n\n{options}\n\n(כתוב את התחומים שבחרת, מופרדים בפסיקה)"
+        want = _g(g, "תרצה", "תרצי")
+        separate = _g(g, "הפרד", "הפרידי")
+        chose = _g(g, "שבחרת", "שבחרת")
+        return (
+            f"*באילו תחומים {want} להתמקד?*\n\n"
+            f"{options}\n\n"
+            f"({separate} באמצעות פסיק את התחומים {chose})"
+        )
 
     elif step == "focus":
         chosen = [f.strip() for f in message.replace("،", ",").split(",") if f.strip()]
@@ -83,11 +122,13 @@ def handle_onboarding(user: User, message: str) -> str:
         updated_res = db.table("users").select("*").eq("phone", clean_phone).limit(1).execute()
         updated_user = User.from_dict(updated_res.data[0])
         name = updated_user.name or ""
+        want2 = _g(updated_user.gender, "תרצה", "תרצי")
+        write2 = _g(updated_user.gender, "כתוב", "כתבי")
         return (
             f"מושלם {name}, הפרופיל שלך מוכן!\n\n"
-            "בוא נתחיל מיד –\n"
-            "*מה אתה רוצה להשיג בימים הקרובים? מה עומד לך על הראש עכשיו?*\n\n"
-            "(כתוב בחופשיות – אני אעזור לך להפוך את זה למשימות)"
+            f"בוא נתחיל מיד –\n"
+            f"*מה {want2} להשיג בימים הקרובים? מה עומד לך על הראש עכשיו?*\n\n"
+            f"({write2} בחופשיות – אני אעזור לך להפוך את זה למשימות)"
         )
 
     elif step == "first_plan":
