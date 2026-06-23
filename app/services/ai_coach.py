@@ -99,25 +99,34 @@ def _status_he(status: str) -> str:
 
 def chat(user: User, message: str, tasks: list[Task], today_plan: DailyPlan | None,
          recent_history: str, patterns_summary: str, completion_rate_7d: float) -> dict:
+    import time
     client = _get_client()
     system = _build_system_prompt(user, tasks, today_plan, recent_history, patterns_summary, completion_rate_7d)
 
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
-        system=system,
-        messages=[{"role": "user", "content": message}],
-    )
-
-    raw = response.content[0].text.strip()
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        start = raw.find("{")
-        end = raw.rfind("}") + 1
-        if start >= 0 and end > start:
-            return json.loads(raw[start:end])
-        return {"message": raw, "actions": [], "mood_score": None}
+    last_error = None
+    for attempt in range(3):
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=1024,
+                system=system,
+                messages=[{"role": "user", "content": message}],
+            )
+            raw = response.content[0].text.strip()
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                start = raw.find("{")
+                end = raw.rfind("}") + 1
+                if start >= 0 and end > start:
+                    return json.loads(raw[start:end])
+                return {"message": raw, "actions": [], "mood_score": None}
+        except anthropic.InternalServerError as e:
+            last_error = e
+            if attempt < 2:
+                time.sleep(2 ** attempt)  # 1s, 2s
+    print(f"Anthropic 500 after 3 attempts: {last_error}")
+    return {"message": "משהו השתבש אצלי כרגע, נסה שוב בעוד רגע.", "actions": [], "mood_score": None}
 
 
 def generate_followup_message(user: User, task_title: str, followup_count: int) -> str:
