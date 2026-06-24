@@ -104,6 +104,14 @@ def _apply_actions(context: dict, actions: list[dict]):
                     "order_num": next_order,
                 }).execute()
 
+        elif atype == "snooze_task":
+            task_num = action.get("task_num")
+            until = action.get("until")
+            matching = [t for t in tasks if t.order_num == task_num]
+            if matching and until:
+                from app.database.supabase import get_db
+                get_db().table("tasks").update({"snoozed_until": until}).eq("id", matching[0].id).execute()
+
         elif atype == "schedule_followup":
             from app.database.supabase import get_db
             from datetime import datetime, timedelta, timezone

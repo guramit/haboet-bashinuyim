@@ -85,7 +85,8 @@ def _build_system_prompt(user: User, tasks: list[Task], today_plan: DailyPlan | 
 - {{"type": "update_mood", "score": N}}
 - {{"type": "add_insight", "text": "..."}}
 - {{"type": "add_task", "title": "...", "category": "..."}}
-- {{"type": "schedule_followup", "task_num": N}} – השתמש בזה כשהמשתמש אומר שהוא הולך לבצע משימה עכשיו ("אני הולך לעשות", "עכשיו אני מתחיל", "יאללה עושה את זה")"""
+- {{"type": "schedule_followup", "task_num": N}} – השתמש בזה כשהמשתמש אומר שהוא הולך לבצע משימה עכשיו ("אני הולך לעשות", "עכשיו אני מתחיל", "יאללה עושה את זה")
+- {{"type": "snooze_task", "task_num": N, "until": "YYYY-MM-DD"}} – השתמש בזה כשהמשתמש דוחה משימה לתאריך ספציפי ("אדחה ל-1.7", "נעשה את זה ב-3 ליולי", "לא היום, ב-X"). חשב את התאריך ביחס להיום ({date.today().strftime("%Y-%m-%d")}) והחזר בפורמט YYYY-MM-DD. לאחר הדחייה – אל תזכיר את המשימה שוב באותו יום."""
 
 
 def _status_he(status: str) -> str:

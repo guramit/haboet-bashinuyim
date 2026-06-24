@@ -13,8 +13,9 @@ def get_incomplete_tasks_from_yesterday(user_id: str) -> list[dict]:
     if not plan_res.data:
         return []
     plan_id = plan_res.data[0]["id"]
+    today = date.today().isoformat()
     res = db.table("tasks").select("*").eq("daily_plan_id", plan_id).in_("status", ["pending", "partial"]).execute()
-    return res.data or []
+    return [t for t in (res.data or []) if not t.get("snoozed_until") or t["snoozed_until"] <= today]
 
 
 def determine_day_type(user_id: str, weekday: int) -> str:
